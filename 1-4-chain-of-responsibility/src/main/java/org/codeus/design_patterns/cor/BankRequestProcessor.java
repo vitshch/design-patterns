@@ -1,26 +1,50 @@
 package org.codeus.design_patterns.cor;
 
+import org.codeus.design_patterns.cor.handler.*;
+
 public class BankRequestProcessor {
+
     public void process(BankRequest request) {
-        if (request.getType() == null) {
+        RequestHandler handlerChain = getHandlerChain(request);
+        handlerChain.handle(request);
+    }
+
+    private RequestHandler getHandlerChain(BankRequest bankRequest) {
+        RequestType type = bankRequest.getType();
+        if (type == null) {
             throw new IllegalArgumentException("Request type is null");
         }
-        final RequestType type = request.getType();
-
-        if ((type == RequestType.TRANSFER || type == RequestType.BILL_PAYMENT)
-                && request.getAmount() > Constants.DAILY_LIMIT
-                && request.getAmount() < Constants.AML_THRESHOLD) {
-            throw new IllegalArgumentException("Daily limit exceeded: " + request.getAmount());
-        }
-
-        if (request.getAmount() > Constants.AML_THRESHOLD) {
-            throw new IllegalArgumentException("Blocked by AML");
-        }
-
         if (type == RequestType.TRANSFER || type == RequestType.BILL_PAYMENT) {
-            request.setAmount(request.getAmount() * (1 + Constants.COMMISSION_TRANSFER_RATE));
+            return buildTransferChain();
+        } else if (type == RequestType.CREDIT_APPLICATION) {
+            return buildCreditApplicationChain();
         }
-
-        System.out.println("Processed: " + request);
+        throw new IllegalArgumentException("Unsupported request type: " + type);
     }
+
+    private RequestHandler buildTransferChain() {
+        return buildChain(
+                new DailyLimitRequestHandler(),
+                new AmlRequestHandler(),
+                new TransferRequestHandler(),
+                new LoggingRequestHandler()
+        );
+    }
+
+    private RequestHandler buildCreditApplicationChain() {
+        return buildChain(
+                new AmlRequestHandler(),
+                new LoggingRequestHandler()
+        );
+    }
+
+    private RequestHandler buildChain(RequestHandler requestHandler, RequestHandler... nextHandlers) {
+        RequestHandler current = requestHandler;
+        for (RequestHandler next : nextHandlers) {
+            current.setNext(next);
+            current = next;
+        }
+        return requestHandler;
+    }
+
 }
